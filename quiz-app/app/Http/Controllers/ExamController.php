@@ -4,65 +4,73 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use App\Models\{Exam, Question, Subject};   
+use App\Models\{Exam, Question, Subject, Classroom};   
 
 
 class ExamController extends Controller
 {
   public function index(Request $r)
   {
-      $q = Exam::with('subject')
-          ->when(auth()->user()->role==='teacher', fn($x)=>$x->where('created_by',auth()->id()))
-          ->when($r->filled('subject_id'), fn($x)=>$x->where('subject_id',$r->subject_id))
-          ->latest();
+    $q = Exam::with(['subject','classroom'])
+        ->when(auth()->user()->role==='teacher', fn($x)=>$x->where('created_by',auth()->id()))
+        ->when($r->filled('classroom_id'), fn($x)=>$x->where('classroom_id',$r->classroom_id))
+        ->when($r->filled('subject_id'),   fn($x)=>$x->where('subject_id',$r->subject_id))
+        ->latest();
 
-      return view('exams.index', [
-          'exams' => $q->paginate(12)->withQueryString(),
-          'subjects' => Subject::orderBy('name')->get(),
-          'filters' => $r->only('subject_id')
-      ]);
+    return view('exams.index', [
+        'exams'      => $q->paginate(12)->withQueryString(),
+        'subjects'   => Subject::orderBy('name')->get(),
+        'classrooms' => Classroom::orderBy('name')->get(),
+        'filters'    => $r->only('classroom_id','subject_id'),
+    ]);
   }
 
   public function create()
   {
-      return view('exams.create', ['subjects'=>Subject::orderBy('name')->get()]);
+    return view('exams.create', [
+            'subjects'   => Subject::orderBy('name')->get(),
+            'classrooms' => Classroom::orderBy('name')->get(),
+        ]);
   }
 
   public function store(Request $r)
   {
-      $data = $r->validate([
-          'title' => 'required|string|max:255',
-          'subject_id' => 'nullable|exists:subjects,id',
-          'duration_minutes' => 'required|integer|min:5'
-      ]);
-      $data['created_by'] = auth()->id();
+    $data = $r->validate([
+        'title'            => 'required|string|max:255',
+        'classroom_id'     => 'required|exists:classrooms,id',
+        'subject_id'       => 'nullable|exists:subjects,id',
+        'duration_minutes' => 'required|integer|min:5',
+        'is_public'        => 'sometimes|boolean',
+    ]);
+    $data['created_by'] = auth()->id();
+    $data['is_public']  = $r->boolean('is_public');
 
-      $exam = Exam::create($data);
-      return redirect()->route('exams.edit',$exam)->with('ok','Đã tạo đề, hãy thêm câu hỏi');
+    $exam = Exam::create($data);
+
+    return redirect()->route('exams.edit',$exam)->with('ok','Đã tạo đề, hãy thêm câu hỏi');
   }
 
   public function edit(Exam $exam, Request $r)
   {
     $this->ownerOrAdmin($exam->created_by);
 
-    // Lấy danh sách ID câu hỏi đã chọn cho đề
-    $selectedIds = $exam->questions()->pluck('questions.id')->toArray(); // hoặc ->pluck('id')->toArray();
+    $selectedIds = $exam->questions()->pluck('questions.id')->toArray();
 
-    // Danh sách câu hỏi để chọn thêm
     $questions = Question::with('subject')
         ->when(auth()->user()->role === 'teacher', fn($x) => $x->where('created_by', auth()->id()))
-        ->when($r->filled('subject_id'), fn($x) => $x->where('subject_id', $r->subject_id))
-        ->when($r->filled('difficulty'), fn($x) => $x->where('difficulty', $r->difficulty))
+        ->when($r->filled('subject_id'),   fn($x) => $x->where('subject_id', $r->subject_id))
+        ->when($r->filled('difficulty'),   fn($x) => $x->where('difficulty', $r->difficulty))
         ->orderByDesc('id')
         ->paginate(12)
         ->withQueryString();
 
     return view('exams.edit', [
-        'exam'       => $exam->load('subject', 'questions.options'),
-        'questions'  => $questions,
-        'selectedIds'=> $selectedIds,
-        'subjects'   => Subject::orderBy('name')->get(),
-        'filters'    => $r->only('subject_id','difficulty')
+        'exam'        => $exam->load('subject','classroom','questions.options'),
+        'questions'   => $questions,
+        'selectedIds' => $selectedIds,
+        'subjects'    => Subject::orderBy('name')->get(),
+        'classrooms'  => Classroom::orderBy('name')->get(),
+        'filters'     => $r->only('subject_id','difficulty'),
     ]);
   }
 
@@ -71,21 +79,30 @@ class ExamController extends Controller
   {
     $this->ownerOrAdmin($exam->created_by);
 
-    // 1) Validate và cập nhật thông tin đề
-    $exam->update($r->validate([
+    $data = $r->validate([
         'title'            => 'required|string|max:255',
+        'classroom_id'     => 'required|exists:classrooms,id',
         'subject_id'       => 'nullable|exists:subjects,id',
         'duration_minutes' => 'required|integer|min:5',
-    ]));
+        'is_public'        => 'sometimes|boolean',
+        'question_ids'     => 'nullable|array',
+        'question_ids.*'   => 'integer|exists:questions,id',
+    ]);
 
-    // 2) Lưu danh sách câu hỏi (từ checkbox question_ids[])
-    $ids = collect($r->input('question_ids', []))->unique()->values()->all();
+    $exam->update([
+        'title'            => $data['title'],
+        'classroom_id'     => $data['classroom_id'],
+        'subject_id'       => $data['subject_id'] ?? null,
+        'duration_minutes' => $data['duration_minutes'],
+        'is_public'        => $r->boolean('is_public'),
+    ]);
 
+    $ids = collect($data['question_ids'] ?? [])->unique()->values()->all();
     $pivot = [];
     foreach ($ids as $i => $qid) {
         $pivot[$qid] = ['order' => $i + 1, 'points' => 1];
     }
-    $exam->questions()->sync($pivot);  // ghi đè thứ tự & điểm mặc định = 1
+    $exam->questions()->sync($pivot);
 
     return redirect()->route('exams.edit',$exam)->with('ok', 'Đã lưu đề thi');
   }
@@ -95,7 +112,7 @@ class ExamController extends Controller
       $this->ownerOrAdmin($exam->created_by);
       $exam->questions()->detach();
       $exam->delete();
-      return redirect()->route('exams.edit',$exam)->with('ok','Đã xoá đề thi');
+      return redirect()->route('exams.index',$exam)->with('ok','Đã xoá đề thi');
   }
 
   public function publish(Exam $exam)
@@ -108,41 +125,44 @@ class ExamController extends Controller
   // tạo câu hỏi ngẫu nhiên theo tỉ lệ
   public function autoGenerate(Request $r, Exam $exam)
   {
-      $this->ownerOrAdmin($exam->created_by);
+    $this->ownerOrAdmin($exam->created_by);
 
-      $data = $r->validate([
-          'subject_id' => 'nullable|exists:subjects,id',
-          'total' => 'required|integer|min:1',
-          'mix.easy' => 'required|integer|min:0',
-          'mix.med'  => 'required|integer|min:0',
-          'mix.hard' => 'required|integer|min:0',
-      ]);
+    $data = $r->validate([
+        'subject_id' => 'nullable|exists:subjects,id',
+        'total'      => 'required|integer|min:1',
+        'mix.easy'   => 'required|integer|min:0',
+        'mix.med'    => 'required|integer|min:0',
+        'mix.hard'   => 'required|integer|min:0',
+    ]);
 
-      $total = (int)$data['total'];
-      $mix = $data['mix'];
+    $total = (int)$data['total'];
+    $mix   = $data['mix'];
 
-      $counts = [
-          'easy' => (int)round($total * ($mix['easy'] / 100)),
-          'med'  => (int)round($total * ($mix['med']  / 100)),
-          'hard' => (int)round($total * ($mix['hard'] / 100)),
-      ];
-      // đảm bảo tổng đúng bằng $total
-      $diff = $total - array_sum($counts);
-      if ($diff !== 0) $counts['med'] += $diff;
+    $counts = [
+        'easy' => (int)round($total * ($mix['easy'] / 100)),
+        'med'  => (int)round($total * ($mix['med']  / 100)),
+        'hard' => (int)round($total * ($mix['hard'] / 100)),
+    ];
+    $diff = $total - array_sum($counts);
+    if ($diff !== 0) $counts['med'] += $diff;
 
-      $exam->questions()->detach();
+    $exam->questions()->detach();
 
-      foreach ($counts as $difficulty=>$cnt) {
-          if ($cnt <= 0) continue;
-          $q = Question::when($data['subject_id'] ?? null, fn($x)=>$x->where('subject_id',$data['subject_id']))
-              ->where('difficulty',$difficulty)
-              ->inRandomOrder()->limit($cnt)->pluck('id');
-          foreach ($q as $qid) {
-              $exam->questions()->attach($qid, ['order'=>$exam->questions()->count()+1, 'points'=>1]);
-          }
-      }
+    foreach ($counts as $difficulty=>$cnt) {
+        if ($cnt <= 0) continue;
+        $qids = Question::when($data['subject_id'] ?? null, fn($x)=>$x->where('subject_id',$data['subject_id']))
+            ->where('difficulty',$difficulty)
+            ->inRandomOrder()->limit($cnt)->pluck('id');
 
-      return back()->with('ok','Đã tạo đề tự động');
+        foreach ($qids as $qid) {
+            $exam->questions()->attach($qid, [
+                'order'  => $exam->questions()->count() + 1,
+                'points' => 1
+            ]);
+        }
+    }
+
+    return back()->with('ok','Đã tạo đề tự động');
   }
 
   private function ownerOrAdmin($ownerId)
@@ -153,15 +173,27 @@ class ExamController extends Controller
   public function catalog(Request $r)
     {
         // danh sách đề public cho mọi role đăng nhập
-        $q = Exam::with('subject')
+        $classroomId = $r->input('classroom_id') ?? session('classroom_id');
+        if ($r->filled('classroom_id')) {
+            session(['classroom_id' => $r->classroom_id]);
+        }
+
+        $exams = Exam::with('subject','classroom')
             ->where('is_public', true)
-            ->when($r->filled('subject_id'), fn($x)=>$x->where('subject_id',$r->subject_id))
-            ->latest();
+            ->when($classroomId, fn($x)=>$x->where('classroom_id', $classroomId))
+            ->when($r->filled('subject_id'), fn($x)=>$x->where('subject_id', $r->subject_id))
+            ->latest()
+            ->paginate(12)
+            ->withQueryString();
 
         return view('exams.catalog', [
-            'exams'    => $q->paginate(12)->withQueryString(),
-            'subjects' => Subject::orderBy('name')->get(),
-            'filters'  => $r->only('subject_id')
+            'exams'      => $exams,
+            'subjects'   => Subject::orderBy('name')->get(),
+            'classrooms' => Classroom::orderBy('name')->get(),
+            'filters'    => [
+                'classroom_id' => $classroomId,
+                'subject_id'   => $r->input('subject_id'),
+            ],
         ]);
     }
 

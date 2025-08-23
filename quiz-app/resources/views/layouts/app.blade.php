@@ -2,14 +2,14 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>{{ $title ?? 'Quiz App' }}</title>
+  <title>{{ $title ?? 'Learning' }}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-50">
 <nav class="bg-white shadow mb-6">
   <div class="max-w-6xl mx-auto px-4 py-3 flex justify-between">
-    <a href="/dashboard" class="font-semibold">Quiz App</a>
+    <a href="/" class="font-semibold">Learning</a>
     @auth
       @php $u = auth()->user(); @endphp
       <div class="flex items-center gap-3">

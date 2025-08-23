@@ -68,9 +68,12 @@
 
   <div class="bg-white border rounded p-3">
     <div class="font-medium mb-2">Hình ảnh (tuỳ chọn)</div>
-    @if($isEdit && $question->image_url)
+    @if($isEdit && !empty($question->image_path))
       <div class="mb-2">
-        <img src="{{ $question->image_url }}" class="max-h-40 rounded border" alt="preview">
+        <img
+          src="{{ $question->image_url ?? asset('storage/'.$question->image_path) }}"
+          class="max-h-40 rounded border"
+          alt="preview">
       </div>
       <label class="inline-flex items-center gap-2 mb-2">
         <input type="checkbox" name="remove_image" value="1"> Xoá ảnh hiện tại

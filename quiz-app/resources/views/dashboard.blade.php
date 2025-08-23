@@ -5,6 +5,7 @@
   @if(auth()->user()->isAdmin() || auth()->user()->isTeacher())
     <a class="p-4 bg-white rounded shadow" href="{{ route('questions.index') }}">Ngân hàng câu hỏi</a>
     <a class="p-4 bg-white rounded shadow" href="{{ route('exams.create') }}">Tạo đề</a>
+    <a class="p-4 bg-white rounded shadow" href="{{ route('classrooms.index') }}">Quản lý lớp học</a>
   @endif
   <a class="p-4 bg-white rounded shadow" href="{{ route('attempts.index') }}">Kết quả của tôi</a>
 </div>
