@@ -20,6 +20,15 @@
 <div class="space-y-4">
   <div class="grid md:grid-cols-3 gap-3">
     <div>
+      <label class="block mb-1 font-medium">Lớp</label>
+      <select name="classroom_id" class="border p-2 rounded w-full" required>
+        @foreach($classrooms as $c)
+          <option value="{{ $c->id }}"
+            @selected(old('classroom_id', $question->classroom_id ?? '') == $c->id)>{{ $c->name }}</option>
+        @endforeach
+      </select>
+    </div>
+    <div>
       <label class="block mb-1 font-medium">Môn học</label>
       <select name="subject_id" class="border p-2 rounded w-full" required>
         @foreach($subjects as $s)
@@ -35,7 +44,10 @@
         <select name="topic_id" class="border p-2 rounded w-full">
           <option value="">—</option>
           @foreach($topics as $t)
-            <option value="{{ $t->id }}" @selected(old('topic_id',$question->topic_id ?? '')==$t->id)>{{ $t->name }}</option>
+            <option value="{{ $t->id }}"
+              @selected((string)old('topic_id', $question->topic_id ?? '') === (string)$t->id)>
+              {{ $t->name }}
+            </option>
           @endforeach
         </select>
         <a href="{{ route('topics.create') }}" target="_blank" title="Thêm chủ đề" class="px-3 py-2 bg-gray-200 rounded">+</a>

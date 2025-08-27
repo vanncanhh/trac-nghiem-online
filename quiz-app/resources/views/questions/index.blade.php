@@ -16,6 +16,12 @@
       <option value="{{ $t->id }}" @selected(($filters['topic_id'] ?? '') == $t->id)>{{ $t->name }}</option>
     @endforeach
   </select>
+  <select name="classroom_id" class="border p-2 rounded">
+    <option value="">-- Lớp --</option>
+    @foreach($classrooms as $c)
+      <option value="{{ $c->id }}" @selected(($filters['classroom_id'] ?? '') == $c->id)>{{ $c->name }}</option>
+    @endforeach
+  </select>
 
   <select name="subject_id" class="border p-2 rounded">
     <option value="">-- Môn học --</option>
@@ -43,6 +49,7 @@
         <tr>
           <th class="px-3 py-2 w-16">ID</th>
           <th class="px-3 py-2">Nội dung</th>
+          <th class="px-3 py-2 w-28">Lớp</th>
           <th class="px-3 py-2 w-40">Môn học</th>
           <th class="px-3 py-2 w-40">Chủ đề</th>   {{-- đưa Chủ đề lên trước / tuỳ bạn --}}
           <th class="px-3 py-2 w-28">Độ khó</th>
@@ -56,6 +63,7 @@
           <tr>
             <td class="px-3 py-2 text-gray-600">#{{ $q->id }}</td>
             <td class="px-3 py-2">{{ \Illuminate\Support\Str::limit($q->content, 120) }}</td>
+            <td class="px-3 py-2">{{ $q->classroom->name ?? '—' }}</td>
             <td class="px-3 py-2">{{ $q->subject->name ?? '—' }}</td>
             <td class="px-3 py-2">{{ $q->topicRef->name ?? '—' }}</td> {{-- lấy theo quan hệ --}}
             <td class="px-3 py-2">{{ strtoupper($q->difficulty) }}</td>

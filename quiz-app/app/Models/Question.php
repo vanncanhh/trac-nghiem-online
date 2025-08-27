@@ -11,7 +11,8 @@ class Question extends Model
 {
     use HasFactory;
     use SoftDeletes;
-    protected $fillable=['subject_id','created_by','content','difficulty','points','topic','source','image_path'];
+    protected $fillable=['subject_id','classroom_id','topic_id','created_by','content','difficulty','points','topic','source','image_path'];
+    public function classroom(){ return $this->belongsTo(\App\Models\Classroom::class); }
     public function subject(){ return $this->belongsTo(Subject::class); }
     public function topicRef(){ return $this->belongsTo(Topic::class, 'topic_id'); }
     public function options(){ return $this->hasMany(Option::class); }

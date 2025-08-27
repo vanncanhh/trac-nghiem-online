@@ -58,6 +58,7 @@ class ExamController extends Controller
 
     $questions = Question::with('subject')
         ->when(auth()->user()->role === 'teacher', fn($x) => $x->where('created_by', auth()->id()))
+        ->where('classroom_id', $exam->classroom_id)
         ->when($r->filled('subject_id'),   fn($x) => $x->where('subject_id', $r->subject_id))
         ->when($r->filled('difficulty'),   fn($x) => $x->where('difficulty', $r->difficulty))
         ->orderByDesc('id')
@@ -150,7 +151,8 @@ class ExamController extends Controller
 
     foreach ($counts as $difficulty=>$cnt) {
         if ($cnt <= 0) continue;
-        $qids = Question::when($data['subject_id'] ?? null, fn($x)=>$x->where('subject_id',$data['subject_id']))
+        $qids = Question::where('classroom_id', $exam->classroom_id)
+            ->when($data['subject_id'] ?? null, fn($x)=>$x->where('subject_id',$data['subject_id']))
             ->where('difficulty',$difficulty)
             ->inRandomOrder()->limit($cnt)->pluck('id');
 

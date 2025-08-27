@@ -4,7 +4,7 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use App\Models\{Question, Subject, Option, Topic};  
+use App\Models\{Question, Subject, Option, Topic, Classroom};  
 
 class QuestionController extends Controller
 {
@@ -12,6 +12,7 @@ class QuestionController extends Controller
     {
         $q = Question::with(['subject','topicRef'])
             ->when(auth()->user()->role === 'teacher', fn($x) => $x->where('created_by', auth()->id()))
+            ->when($r->filled('classroom_id'), fn($x) => $x->where('classroom_id', $r->classroom_id))
             ->when($r->filled('subject_id'), fn($x) => $x->where('subject_id', $r->subject_id))
             ->when($r->filled('topic_id'),   fn($x) => $x->where('topic_id',   $r->topic_id))   
             ->when($r->filled('difficulty'), fn($x) => $x->where('difficulty', $r->difficulty))
@@ -21,8 +22,9 @@ class QuestionController extends Controller
         return view('questions.index', [
             'qs'       => $q->paginate(12)->withQueryString(),
             'subjects' => Subject::orderBy('name')->get(),
-            'topics'   => Topic::orderBy('name')->get(),               
-            'filters'  => $r->only('subject_id','topic_id','difficulty','kw')  
+            'topics'   => Topic::orderBy('name')->get(),     
+            'classrooms' => Classroom::orderBy('name')->get(),          
+            'filters'  => $r->only('classroom_id','subject_id','topic_id','difficulty','kw')  
         ]);
     }
 
@@ -30,12 +32,14 @@ class QuestionController extends Controller
     {
         $subjects = Subject::orderBy('name')->get();
         $topics   = Topic::orderBy('name')->get();
-        return view('questions.create', compact('subjects','topics'));
+        $classrooms = Classroom::orderBy('name')->get();
+        return view('questions.create', compact('subjects','topics','classrooms'));
     }
 
     public function store(Request $r)
     {
         $data = $r->validate([
+            'classroom_id' => 'required|exists:classrooms,id',
             'subject_id'=>'required|exists:subjects,id',
             'topic_id'=>'nullable|exists:topics,id',
             'content'=>'required|string',
@@ -48,13 +52,19 @@ class QuestionController extends Controller
             'options.*.is_correct'=>'nullable|boolean'
         ]);
 
+        $data['topic_id'] = $data['topic_id'] ?? null;
+        if ($data['topic_id'] === '' || $data['topic_id'] === '0' || $data['topic_id'] === 0) {
+            $data['topic_id'] = null;
+        }
+
         // ít nhất 1 đáp án đúng
         $hasCorrect = collect($data['options'])->contains(fn($o) => !empty($o['is_correct']));
         abort_unless($hasCorrect, 422, 'Ít nhất 1 đáp án phải đúng.');
 
         $q = Question::create([
+            'classroom_id' => $data['classroom_id'],
             'subject_id'=>$data['subject_id'],
-            'topic_id'=>$data['topic_id'] ?? null,
+            'topic_id'=>$data['topic_id'],
             'created_by'=>auth()->id(),
             'content'=>$data['content'],
             'difficulty'=>$data['difficulty'],
@@ -82,7 +92,8 @@ class QuestionController extends Controller
         $question->load('options');
         $subjects = Subject::orderBy('name')->get();
         $topics   = Topic::orderBy('name')->get();
-        return view('questions.edit', compact('question','subjects','topics'));
+        $classrooms = Classroom::orderBy('name')->get();
+        return view('questions.edit', compact('question','subjects','topics','classrooms'));
     }
 
     public function update(Request $r, Question $question)
@@ -90,6 +101,7 @@ class QuestionController extends Controller
         $this->ownerOrAdmin($question->created_by);
 
         $data = $r->validate([
+            'classroom_id' => 'required|exists:classrooms,id',
             'subject_id' => 'required|exists:subjects,id',
             'topic_id'   => 'nullable|exists:topics,id',
             'content'    => 'required|string',
@@ -102,11 +114,15 @@ class QuestionController extends Controller
             'options.*.text' => 'required|string|max:255',
             'options.*.is_correct' => 'nullable|boolean'
         ]);
+        $data['topic_id'] = $data['topic_id'] ?? null;
+        if ($data['topic_id'] === '' || $data['topic_id'] === '0' || $data['topic_id'] === 0) {
+            $data['topic_id'] = null;
+        }
 
         $hasCorrect = collect($data['options'])->contains(fn($o) => !empty($o['is_correct']));
         abort_unless($hasCorrect, 422, 'Ít nhất 1 đáp án phải đúng.');
 
-        $question->update($r->only('subject_id','topic_id','content','difficulty','points','topic','source'));
+        $question->update($r->only('classroom_id','subject_id','topic_id','content','difficulty','points','topic','source'));
         if ($r->boolean('remove_image') && $question->image_path) {
             Storage::disk('public')->delete($question->image_path);
             $question->image_path = null;
